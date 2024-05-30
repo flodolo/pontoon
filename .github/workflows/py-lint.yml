@@ -27,8 +27,8 @@ jobs:
           python-version: '3.11'
       - name: Install Dependencies
         run: |
-          pip install -U pip
-          pip install -r requirements/lint.txt
+          pip install uv
+          uv pip install --system -r requirements/lint.txt
       - name: flake8
         run: flake8 pontoon
 
@@ -41,8 +41,8 @@ jobs:
           python-version: '3.11'
       - name: Install Dependencies
         run: |
-          pip install -U pip
-          pip install -r requirements/lint.txt
+          pip install uv
+          uv pip install --system -r requirements/lint.txt
       - name: black
         run: black --check pontoon
 
@@ -55,7 +55,7 @@ jobs:
           python-version: '3.11'
       - name: Install Dependencies
         run: |
-          pip install -U pip
-          pip install -r requirements/lint.txt
+          pip install uv
+          uv pip install --system -r requirements/lint.txt
       - name: pyupgrade
         run: pyupgrade --py311-plus *.py `find pontoon -name \*.py`
