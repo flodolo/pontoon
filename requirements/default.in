@@ -45,6 +45,7 @@ psycopg2==2.9.6
 PyJWT==2.9.0
 python-dateutil==2.9.0
 python-dotenv==1.0.1
+python-json-logger==4.0.0
 rapidfuzz==3.9.7
 raygun4py==4.3.0
 sacrebleu==2.4.3
