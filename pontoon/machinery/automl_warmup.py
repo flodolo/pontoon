@@ -28,8 +28,7 @@ from pontoon.base.models import Locale  # noqa
 from pontoon.machinery.utils import get_google_automl_translation  # noqa
 
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-log = logging.getLogger(__name__)
+log = logging.getLogger("pontoon.autoMLwarmup")
 sched = BlockingScheduler()
 
 

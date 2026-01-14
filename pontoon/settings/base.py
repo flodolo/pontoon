@@ -4,7 +4,6 @@ import logging
 import os
 import re
 import socket
-import sys
 
 from datetime import datetime
 from ipaddress import ip_address, ip_network
@@ -846,58 +845,67 @@ PASSWORD_HASHERS = (
 )
 
 # Logging
-# Get environment variables
+IS_KUBERNETES = "KUBERNETES_SERVICE_HOST" in os.environ
 LOG_TO_FILE = os.getenv("LOG_TO_FILE", "False") == "True"
 
-# Ensure the logs directory exists
-if LOG_TO_FILE:
-    log_dir = path("logs")
-    os.makedirs(log_dir, exist_ok=True)
-
-# Define file handlers
-django_file_handler = {
-    "class": "logging.handlers.RotatingFileHandler",
-    "filename": path("logs", "django_debug.log"),
-    "maxBytes": 1024 * 1024 * 2,  # 2 MB
-    "backupCount": 3,
-    "formatter": "verbose",
-}
-
-pontoon_file_handler = {
-    "class": "logging.handlers.RotatingFileHandler",
-    "filename": path("logs", "pontoon_debug.log"),
-    "maxBytes": 1024 * 1024 * 2,  # 2 MB
-    "backupCount": 3,
-    "formatter": "verbose",
-}
-
-# Define logging configuration
+# Define the Base LOGGING
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler", "stream": sys.stdout}},
     "formatters": {
+        "json": {
+            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            "format": "%(levelname)s %(name)s %(message)s %(asctime)s",
+            "rename_fields": {"levelname": "severity"},
+        },
         "verbose": {"format": "[%(levelname)s:%(name)s] %(asctime)s %(message)s"},
     },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "json" if IS_KUBERNETES else "verbose",
+        },
+    },
     "loggers": {
-        "django": {"handlers": ["console"]},
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
         "pontoon": {
             "handlers": ["console"],
             "level": os.environ.get("DJANGO_LOG_LEVEL", "DEBUG" if DEBUG else "INFO"),
+            "propagate": False,
         },
     },
 }
 
-# Adding file handlers if logging to file is enabled
-if LOG_TO_FILE:
-    LOGGING["handlers"]["django_file"] = django_file_handler
-    LOGGING["handlers"]["pontoon_file"] = pontoon_file_handler
+# Add File Handlers ONLY if enabled AND not on K8s
+if LOG_TO_FILE and not IS_KUBERNETES:
+    log_dir = path("logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    LOGGING["handlers"]["django_file"] = {
+        "class": "logging.handlers.RotatingFileHandler",
+        "filename": os.path.join(log_dir, "django_debug.log"),
+        "maxBytes": 1024 * 1024 * 2,
+        "backupCount": 3,
+        "formatter": "verbose",
+    }
+    LOGGING["handlers"]["pontoon_file"] = {
+        "class": "logging.handlers.RotatingFileHandler",
+        "filename": os.path.join(log_dir, "pontoon_debug.log"),
+        "maxBytes": 1024 * 1024 * 2,
+        "backupCount": 3,
+        "formatter": "verbose",
+    }
+
+    # Register them to the loggers
     LOGGING["loggers"]["django"]["handlers"].append("django_file")
     LOGGING["loggers"]["pontoon"]["handlers"].append("pontoon_file")
 
-if DEBUG:
-    LOGGING["handlers"]["console"]["formatter"] = "verbose"
-
+# SQL Debugging
 if os.environ.get("DJANGO_SQL_LOG", False):
     LOGGING["loggers"]["django.db.backends"] = {
         "level": "DEBUG",
