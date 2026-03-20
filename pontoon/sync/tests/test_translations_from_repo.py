@@ -347,6 +347,85 @@ def test_ini_translations():
 
 
 @pytest.mark.django_db
+def test_skip_duplicate_db_translations():
+    """
+    When the DB contains duplicate approved/pretranslated translations for the
+    same entity/locale, sync should skip duplicates.
+    """
+    with TemporaryDirectory() as root:
+        # Database setup
+        settings.MEDIA_ROOT = root
+        locale = LocaleFactory.create(code="fr-Test")
+        locale_map = {locale.code: locale}
+        repo = RepositoryFactory(url="http://example.com/repo")
+        project = ProjectFactory.create(
+            name="test-skip-duplicates",
+            locales=[locale],
+            repositories=[repo],
+            visibility="public",
+        )
+        res = ResourceFactory.create(
+            project=project, path="strings.xml", format="android"
+        )
+        TranslatedResourceFactory.create(locale=locale, resource=res)
+
+        entity = EntityFactory.create(resource=res, string="source", key=["k1"])
+        # Create two duplicate approved translations for the same entity/locale.
+        # TranslationFactory.save() enforces only one approved translation per
+        # entity/locale, so bypass it with update() to simulate the corrupt
+        # DB state to replicate https://github.com/mozilla/pontoon/issues/2284.
+        TranslationFactory.create(
+            entity=entity,
+            locale=locale,
+            string="target",
+            active=True,
+            approved=True,
+        )
+        t2 = TranslationFactory.create(entity=entity, locale=locale, string="target")
+        Translation.objects.filter(pk=t2.pk).update(approved=True)
+
+        # Filesystem setup: repo has the same string as the DB translations
+        strings_xml = dedent(
+            """\
+            <?xml version="1.0" encoding="utf-8"?>
+            <resources>
+              <string name="k1">target</string>
+            </resources>
+            """
+        )
+        makedirs(repo.checkout_path)
+        build_file_tree(
+            repo.checkout_path,
+            {
+                "en-US": {"strings.xml": ""},
+                "fr-Test": {"strings.xml": strings_xml},
+            },
+        )
+
+        mock_checkout = Mock(
+            Checkout,
+            path=repo.checkout_path,
+            changed=[join("fr-Test", "strings.xml")],
+            removed=[],
+        )
+        checkouts = Checkouts(mock_checkout, mock_checkout)
+        paths = find_paths(project, checkouts)
+
+        # Sync should detect no update is needed (repo matches DB)
+        action_count_before = ActionLog.objects.count()
+        removed_resources, updated_translations = sync_translations_from_repo(
+            project, locale_map, checkouts, paths, cast(Any, []), now
+        )
+        assert (removed_resources, updated_translations) == (0, 0)
+
+        # Both translations should remain untouched — no new actions from sync
+        translations = Translation.objects.filter(entity=entity, locale=locale)
+        assert translations.count() == 2
+        assert all(t.string == "target" for t in translations)
+        assert ActionLog.objects.count() == action_count_before
+
+
+@pytest.mark.django_db
 def test_remove_po_target_resource():
     with TemporaryDirectory() as root:
         # Database setup

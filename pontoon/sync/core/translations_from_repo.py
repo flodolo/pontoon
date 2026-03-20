@@ -206,6 +206,7 @@ def find_db_updates(
             )
         )
         paginator = Paginator(trans_query, per_page=10000, allow_empty_first_page=True)
+        already_processed: set[tuple] = set()
         for page_number in paginator.page_range:
             page = paginator.page(page_number)
             for trans_values in page:
@@ -214,6 +215,10 @@ def find_db_updates(
                     tuple(trans_values["entity__key"]),
                     trans_values["locale_id"],
                 )
+                if key in already_processed:
+                    # Skip duplicate DB translations for the same entity/locale.
+                    continue
+                already_processed.add(key)
                 if key in translations:
                     string, _ = translations[key]
                     if translations_equal(
