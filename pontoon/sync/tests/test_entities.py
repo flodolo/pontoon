@@ -179,7 +179,7 @@ def test_add_resource():
         ) == (3, {"c.ftl"}, set())
         res_c = project.resources.get(path="c.ftl")
         TranslatedResource.objects.get(resource=res_c)
-        assert set(tuple(ent.key) for ent in Entity.objects.filter(resource=res_c)) == {
+        assert {tuple(ent.key) for ent in Entity.objects.filter(resource=res_c)} == {
             ("key-1",),
             ("key-2",),
             ("key-3",),
@@ -246,9 +246,9 @@ def test_update_resource():
         assert sync_resources_from_repo(
             project, locale_map, mock_checkout, paths, now
         ) == (1, {"c.ftl"}, set())
-        assert set(
+        assert {
             (*ent.key, ent.obsolete) for ent in Entity.objects.filter(resource=res["c"])
-        ) == {
+        } == {
             ("key-c-1", True),
             ("key-c-2", False),
             ("key-c-3", True),
