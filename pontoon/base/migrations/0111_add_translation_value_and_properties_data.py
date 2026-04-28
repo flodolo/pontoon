@@ -8,7 +8,7 @@ from moz.l10n.model import CatchallKey, PatternMessage, SelectMessage
 from django.db import migrations, models
 
 
-batch_size = 10000
+batch_size = 3000
 
 
 def set_value_and_properties(apps, schema_editor):
@@ -20,11 +20,12 @@ def set_value_and_properties(apps, schema_editor):
 
     def print_progress():
         nonlocal batch_count
-        if batch_count % 10 == 0:
-            print(f".({(batch_count / batch_total):.1%})", end="", flush=True)
-        else:
-            print(".", end="", flush=True)
         batch_count += 1
+        if batch_count % 10 == 0 or batch_count == batch_total:
+            print(
+                f"Progress: {batch_count}/{batch_total} ({batch_count / batch_total:.1%})",
+                flush=True,
+            )
 
     pv_trans = []
     v_trans = []
