@@ -77,21 +77,34 @@ def concordance_search(request):
             status=400,
         )
 
-    paginator = Paginator(get_concordance_search_data(text, locale), page_results_limit)
+    paginator = Paginator(
+        get_concordance_search_data(request.user, text, locale), page_results_limit
+    )
 
     try:
         data = paginator.page(page)
     except EmptyPage:
         return JsonResponse({"results": [], "has_next": False})
 
-    # ArrayAgg (used in get_concordance_search_data()) does not support using
+    # JSONBAgg (used in get_concordance_search_data()) does not support using
     # distinct=True in combination with ordering, so we need to do one of them
     # manually - after pagination, to reduce the number of rows processed.
-    projects = Project.objects.order_by("disabled", "-priority", "name").values_list(
-        "name", flat=True
-    )
-    for r in data.object_list:
-        r["project_names"] = [p for p in projects if p in r["project_names"]]
+    project_order = {
+        name: i
+        for i, name in enumerate(
+            list(
+                Project.objects.order_by("disabled", "-priority", "name").values_list(
+                    "name", flat=True
+                )
+            )
+        )
+    }
+
+    for result in data.object_list:
+        result["projects"] = sorted(
+            result["projects"],
+            key=lambda x: project_order.get(x["name"], float("inf")),
+        )
 
     return JsonResponse(
         {"results": data.object_list, "has_next": data.has_next()}, safe=False

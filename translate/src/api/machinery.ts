@@ -23,7 +23,11 @@ export type MachineryTranslation = {
   original: string;
   translation: string;
   quality?: number;
-  projectNames?: Array<string | null>;
+  projects?: {
+    name: string;
+    slug: string;
+  }[];
+  entities?: number[];
 };
 
 type ConcordanceTranslations = {
@@ -66,7 +70,11 @@ export async function fetchConcordanceResults(
     results: Array<{
       source: string;
       target: string;
-      project_names: string[];
+      projects: {
+        name: string;
+        slug: string;
+      }[];
+      entities: number[];
     }>;
     has_next: boolean;
   };
@@ -77,7 +85,11 @@ export async function fetchConcordanceResults(
           sources: ['concordance-search'],
           original: item.source,
           translation: item.target,
-          projectNames: item.project_names,
+          projects: item.projects.map((entry) => ({
+            name: entry.name,
+            slug: entry.slug,
+          })),
+          entities: item.entities,
         })),
         hasMore: has_next,
       }

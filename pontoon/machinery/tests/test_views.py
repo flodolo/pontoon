@@ -16,6 +16,7 @@ from pontoon.base.models import (
 )
 from pontoon.test.factories import (
     EntityFactory,
+    ProjectLocaleFactory,
     SectionFactory,
     TeamCommentFactory,
     TermFactory,
@@ -602,6 +603,7 @@ def test_view_concordance_search(client, project_a, locale_a, resource_a):
         )
         for i, x in enumerate(["abaa", "aBaf", "aaAb", "aAab"])
     ]
+    ProjectLocaleFactory.create(project=project_a, locale=locale_a)
     TranslationMemoryFactory.create(
         entity=entities[0],
         source=entities[0].string,
@@ -624,7 +626,17 @@ def test_view_concordance_search(client, project_a, locale_a, resource_a):
     result = json.loads(response.content)
     assert result == {
         "results": [
-            {"source": "aBaf", "target": "cCDd", "project_names": [project_a.name]}
+            {
+                "source": "aBaf",
+                "target": "cCDd",
+                "projects": [
+                    {
+                        "name": "Project A",
+                        "slug": "project_a",
+                    }
+                ],
+                "entities": [entities[1].id],
+            }
         ],
         "has_next": False,
     }
@@ -636,14 +648,24 @@ def test_view_concordance_search(client, project_a, locale_a, resource_a):
     result = json.loads(response.content)
     assert result == {
         "results": [
-            {"source": "abaa", "target": "ccc", "project_names": [project_a.name]}
+            {
+                "source": "abaa",
+                "target": "ccc",
+                "projects": [
+                    {
+                        "name": "Project A",
+                        "slug": "project_a",
+                    }
+                ],
+                "entities": [entities[0].id],
+            }
         ],
         "has_next": False,
     }
 
 
 @pytest.mark.django_db
-def test_view_concordance_search_multiple_project_names(
+def test_view_concordance_search_multiple_names(
     client, project_a, project_b, locale_a, locale_b, resource_a
 ):
     """Check Concordance search doesn't produce duplicated search results."""
@@ -655,6 +677,8 @@ def test_view_concordance_search_multiple_project_names(
         )
         for i, x in enumerate(["abaa", "abaf"])
     ]
+    ProjectLocaleFactory.create(project=project_a, locale=locale_a)
+    ProjectLocaleFactory.create(project=project_b, locale=locale_a)
     TranslationMemoryFactory.create(
         entity=entities[1],
         source=entities[1].string,
@@ -693,9 +717,29 @@ def test_view_concordance_search_multiple_project_names(
             {
                 "source": "abaa",
                 "target": "ccc",
-                "project_names": [project_a.name, project_b.name],
+                "projects": [
+                    {
+                        "name": project_a.name,
+                        "slug": project_a.slug,
+                    },
+                    {
+                        "name": project_b.name,
+                        "slug": project_b.slug,
+                    },
+                ],
+                "entities": [entities[0].id],
             },
-            {"source": "abaf", "target": "ccc", "project_names": [project_a.name]},
+            {
+                "source": "abaf",
+                "target": "ccc",
+                "projects": [
+                    {
+                        "name": project_a.name,
+                        "slug": project_a.slug,
+                    }
+                ],
+                "entities": [entities[1].id],
+            },
         ],
         "has_next": False,
     }
@@ -714,6 +758,7 @@ def test_view_concordance_search_remove_duplicates(
         )
         for i, x in enumerate(["abaa", "abaf"])
     ]
+    ProjectLocaleFactory.create(project=project_a, locale=locale_a)
     TranslationMemoryFactory.create(
         entity=entities[0],
         source=entities[0].string,
@@ -752,9 +797,39 @@ def test_view_concordance_search_remove_duplicates(
     results = json.loads(response.content)
     assert results == {
         "results": [
-            {"source": "abaa", "target": "ccc", "project_names": [project_a.name]},
-            {"source": "abaf", "target": "ccc", "project_names": [project_a.name]},
-            {"source": "abaf", "target": "cccbbb", "project_names": [project_a.name]},
+            {
+                "source": "abaa",
+                "target": "ccc",
+                "projects": [
+                    {
+                        "name": project_a.name,
+                        "slug": project_a.slug,
+                    }
+                ],
+                "entities": [entities[0].id],
+            },
+            {
+                "source": "abaf",
+                "target": "ccc",
+                "projects": [
+                    {
+                        "name": project_a.name,
+                        "slug": project_a.slug,
+                    }
+                ],
+                "entities": [entities[1].id],
+            },
+            {
+                "source": "abaf",
+                "target": "cccbbb",
+                "projects": [
+                    {
+                        "name": project_a.name,
+                        "slug": project_a.slug,
+                    }
+                ],
+                "entities": [entities[1].id],
+            },
         ],
         "has_next": False,
     }
@@ -785,6 +860,8 @@ def test_view_concordance_search_pagination(client, project_a, locale_a, resourc
         EntityFactory(resource=resource_a, string=x, order=i)
         for i, x in enumerate(["abaa", "abaf"])
     ]
+    ProjectLocaleFactory.create(project=project_a, locale=locale_a)
+
     TranslationMemoryFactory.create(
         entity=entities[0],
         source=entities[0].string,
@@ -815,7 +892,17 @@ def test_view_concordance_search_pagination(client, project_a, locale_a, resourc
     results = json.loads(response.content)
     assert results == {
         "results": [
-            {"source": "abaa", "target": "ccc", "project_names": [project_a.name]},
+            {
+                "source": "abaa",
+                "target": "ccc",
+                "projects": [
+                    {
+                        "name": project_a.name,
+                        "slug": project_a.slug,
+                    }
+                ],
+                "entities": [entities[0].id],
+            },
         ],
         "has_next": True,
     }
@@ -827,7 +914,17 @@ def test_view_concordance_search_pagination(client, project_a, locale_a, resourc
     results = json.loads(response.content)
     assert results == {
         "results": [
-            {"source": "abaf", "target": "cccbbb", "project_names": [project_a.name]},
+            {
+                "source": "abaf",
+                "target": "cccbbb",
+                "projects": [
+                    {
+                        "name": project_a.name,
+                        "slug": project_a.slug,
+                    }
+                ],
+                "entities": [entities[1].id],
+            },
         ],
         "has_next": False,
     }
@@ -840,5 +937,58 @@ def test_view_concordance_search_pagination(client, project_a, locale_a, resourc
     results = json.loads(response.content)
     assert results == {
         "results": [],
+        "has_next": False,
+    }
+
+
+@pytest.mark.django_db
+def test_view_concordance_search_null_project_exclusion(
+    client, project_a, locale_a, resource_a
+):
+    entities = [
+        EntityFactory(
+            resource=resource_a,
+            string=x,
+            order=i,
+        )
+        for i, x in enumerate(["abaa", "abaf"])
+    ]
+
+    ProjectLocaleFactory.create(project=project_a, locale=locale_a)
+    TranslationMemoryFactory.create(
+        entity=entities[0],
+        source=entities[0].string,
+        target="ccc",
+        locale=locale_a,
+        project=None,
+    )
+
+    TranslationMemoryFactory.create(
+        entity=entities[1],
+        source=entities[1].string,
+        target="cccbbb",
+        locale=locale_a,
+        project=project_a,
+    )
+
+    response = client.get(
+        "/concordance-search/",
+        {"text": "ccc", "locale": locale_a.code},
+    )
+    results = json.loads(response.content)
+    assert results == {
+        "results": [
+            {
+                "source": "abaf",
+                "target": "cccbbb",
+                "projects": [
+                    {
+                        "name": project_a.name,
+                        "slug": project_a.slug,
+                    }
+                ],
+                "entities": [entities[1].id],
+            },
+        ],
         "has_next": False,
     }
