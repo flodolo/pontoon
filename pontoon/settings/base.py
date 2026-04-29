@@ -824,8 +824,11 @@ STATICFILES_FINDERS = (
 STATICFILES_DIRS = [
     os.path.join(TRANSLATE_DIR, "dist"),
     os.path.join(TRANSLATE_DIR, "public"),
-    ("docs", os.path.join(ROOT, "documentation", "site")),
 ]
+
+docs_site = os.path.join(ROOT, "documentation", "site")
+if os.path.isdir(docs_site):
+    STATICFILES_DIRS.append(("docs", docs_site))
 
 allowed_hosts = os.environ.get("ALLOWED_HOSTS")
 ALLOWED_HOSTS = allowed_hosts.split(",") if allowed_hosts else []
