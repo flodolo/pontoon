@@ -6,7 +6,7 @@ from pontoon.base.models import Entity, Resource, TranslatedResource
 
 
 def update_terminology_project_stats():
-    resource = Resource.objects.get(project__slug="terminology")
+    resource = Resource.objects.current().get(project__slug="terminology")
     resource.total_strings = Entity.objects.filter(
         resource=resource, obsolete=False
     ).count()

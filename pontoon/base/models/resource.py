@@ -5,6 +5,28 @@ from django.utils import timezone
 from pontoon.base.models.project import Project
 
 
+class ResourceQuerySet(models.QuerySet):
+    def mark_as_obsolete(self, now=None):
+        from pontoon.base.models.entity import Entity
+
+        if now is None:
+            now = timezone.now()
+
+        self.update(obsolete=True, date_obsoleted=now)
+        Entity.objects.filter(resource__in=self).update(
+            obsolete=True,
+            date_obsoleted=now,
+            section=None,
+        )
+
+        from pontoon.base.models.translated_resource import TranslatedResource
+
+        TranslatedResource.objects.filter(resource__in=self).delete()
+
+    def current(self):
+        return self.filter(obsolete=False)
+
+
 class Resource(models.Model):
     project: models.ForeignKey["Project"] = models.ForeignKey(
         "Project", models.CASCADE, related_name="resources"
@@ -45,6 +67,8 @@ class Resource(models.Model):
     )
 
     deadline = models.DateField(blank=True, null=True)
+
+    objects = ResourceQuerySet.as_manager()
 
     # Formats that allow empty translations
     EMPTY_TRANSLATION_FORMATS = {

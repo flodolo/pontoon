@@ -39,9 +39,7 @@ def projects(request):
         "projects/projects.html",
         {
             "projects": projects,
-            "all_projects_stats": TranslatedResource.objects.all().string_stats(
-                request.user
-            ),
+            "all_projects_stats": TranslatedResource.objects.string_stats(request.user),
             "project_stats": project_stats,
             "top_instances": get_top_instances(projects, project_stats),
         },

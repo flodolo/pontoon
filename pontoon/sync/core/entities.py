@@ -70,7 +70,7 @@ def sync_resources_from_repo(
 
     with transaction.atomic():
         renamed_paths = rename_resources(project, paths, checkout)
-        removed_paths = remove_resources(project, paths, checkout)
+        removed_paths = remove_resources(project, paths, checkout, now)
         old_res_added_ent_count, changed_paths = update_resources(project, updates, now)
         new_res_added_ent_count, added_paths = add_resources(
             project, updates, changed_paths, now
@@ -105,7 +105,10 @@ def rename_resources(
 
 
 def remove_resources(
-    project: Project, paths: L10nConfigPaths | L10nDiscoverPaths, checkout: Checkout
+    project: Project,
+    paths: L10nConfigPaths | L10nDiscoverPaths,
+    checkout: Checkout,
+    now: datetime,
 ) -> set[str]:
     if not checkout.removed:
         return set()
@@ -117,8 +120,7 @@ def remove_resources(
     )
     removed_db_paths = {res.path for res in removed_resources}
     if removed_db_paths:
-        # FIXME: https://github.com/mozilla/pontoon/issues/2133
-        removed_resources.delete()
+        removed_resources.mark_as_obsolete(now)
         rm_count = len(removed_db_paths)
         str_source_files = "source file" if rm_count == 1 else "source files"
         log.info(
@@ -139,6 +141,20 @@ def update_resources(
     )
     if not changed_resources:
         return 0, set()
+
+    # De-obsolete any resources that were previously marked obsolete
+    # TODO: Entity de-obsoletion needs to accompany Resource de-obsoletion
+    deobsoletion_paths = [
+        res.path for res in changed_resources.values() if res.obsolete
+    ]
+    if deobsoletion_paths:
+        Resource.objects.filter(project=project, path__in=deobsoletion_paths).update(
+            obsolete=False
+        )
+        log.info(
+            f"[{project.slug}] De-obsoleted source files: {', '.join(deobsoletion_paths)}"
+        )
+
     changed_res_paths: set[str] = set(res.path for res in changed_resources.values())
     log.info(f"[{project.slug}] Changed source files: {', '.join(changed_res_paths)}")
 
@@ -281,11 +297,13 @@ def add_resources(
     changed_paths: set[str],
     now: datetime,
 ) -> tuple[int, set[str]]:
+
     new_resources = [
         Resource(project=project, path=db_path, format=get_res_format(res))
         for db_path, res in updates.items()
         if next(res.all_entries(), None) and db_path not in changed_paths
     ]
+
     if not new_resources:
         return 0, set()
 
@@ -347,7 +365,7 @@ def update_translated_resources(
         .iterator()
     )
     add_tr: list[TranslatedResource] = []
-    for resource in Resource.objects.filter(project=project).iterator():
+    for resource in Resource.objects.current().filter(project=project).iterator():
         _, locales = paths.target(resource.path)
         for lc in locales:
             locale = locale_map.get(lc, None)

@@ -179,9 +179,9 @@ def find_db_updates(
 
     resources: dict[str, Resource] = {
         res.path: res
-        for res in Resource.objects.filter(
-            project=project, path__in=resource_paths
-        ).iterator()
+        for res in Resource.objects.current()
+        .filter(project=project, path__in=resource_paths)
+        .iterator()
     }
 
     # Exclude translations for which DB & repo already match

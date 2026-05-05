@@ -12,6 +12,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from pontoon.base.models import Entity, Project, TranslatedResource
+from pontoon.base.models.translation import Translation
 from pontoon.base.tests import (
     EntityFactory,
     LocaleFactory,
@@ -41,7 +42,7 @@ def test_no_changes():
 
 
 @pytest.mark.django_db
-def test_remove_resource():
+def test_resource_obsoletion():
     with TemporaryDirectory() as root:
         # Database setup
         settings.MEDIA_ROOT = root
@@ -51,9 +52,21 @@ def test_remove_resource():
         project = ProjectFactory.create(
             name="test-rm", locales=[locale], repositories=[repo]
         )
-        ResourceFactory.create(project=project, path="a.ftl", format="fluent")
-        ResourceFactory.create(project=project, path="b.po", format="gettext")
+        res_a = ResourceFactory.create(project=project, path="a.ftl", format="fluent")
+        res_b = ResourceFactory.create(project=project, path="b.po", format="gettext")
         res_c = ResourceFactory.create(project=project, path="c.ftl", format="fluent")
+        entity_a = EntityFactory.create(resource=res_a, string="Window")
+        entity_b = EntityFactory.create(resource=res_b, string="Close")
+        entity_c = EntityFactory.create(resource=res_c, string="Hello")
+        translation_a = TranslationFactory.create(
+            entity=entity_a, locale=locale, string="Fenetre"
+        )
+        translation_b = TranslationFactory.create(
+            entity=entity_b, locale=locale, string="Ferme"
+        )
+        translation_c = TranslationFactory.create(
+            entity=entity_c, locale=locale, string="Bonjour"
+        )
 
         # Filesystem setup
         makedirs(repo.checkout_path)
@@ -65,7 +78,12 @@ def test_remove_resource():
             },
         )
 
-        # Paths setup
+        # check TranslatedResource objects before resource obsoletion
+        assert {
+            translated.resource.path for translated in TranslatedResource.objects.all()
+        } == {"a.ftl", "b.po", "c.ftl", "common", "playground"}
+
+        # Paths setup for resource obsoletion
         mock_checkout = Mock(
             Checkout,
             path=repo.checkout_path,
@@ -75,13 +93,108 @@ def test_remove_resource():
         )
         paths = find_paths(project, Checkouts(mock_checkout, mock_checkout))
 
-        # Test
+        # Test sync_resources_from_repo
         assert sync_resources_from_repo(
             project, locale_map, mock_checkout, paths, now
         ) == (0, set(), {"c.ftl"})
-        assert {res.path for res in project.resources.all()} == {"a.ftl", "b.po"}
-        with pytest.raises(TranslatedResource.DoesNotExist):
-            TranslatedResource.objects.get(resource=res_c)
+        assert {res.path: res.obsolete for res in project.resources.all()} == {
+            "a.ftl": False,
+            "b.po": False,
+            "c.ftl": True,
+        }
+        assert {res.path for res in project.resources.current()} == {
+            "a.ftl",
+            "b.po",
+        }
+        assert not TranslatedResource.objects.filter(resource=res_c).exists()
+        assert {
+            translated.resource.path for translated in TranslatedResource.objects.all()
+        } == {"a.ftl", "b.po", "common", "playground"}
+        assert Entity.objects.filter(pk=entity_c.pk).exists()
+
+        assert (
+            Translation.objects.filter(
+                pk__in=[translation_a.pk, translation_b.pk, translation_c.pk]
+            ).count()
+            == 3
+        )
+
+
+@pytest.mark.django_db
+def test_resource_deobsoletion():
+    with TemporaryDirectory() as root:
+        # Database setup
+        settings.MEDIA_ROOT = root
+        locale = LocaleFactory.create(code="fr-Test")
+        locale_map = {locale.code: locale}
+        repo = RepositoryFactory(url="http://example.com/repo")
+        project = ProjectFactory.create(
+            name="test-add", locales=[locale], repositories=[repo]
+        )
+        ResourceFactory.create(project=project, path="a.ftl", format="fluent")
+        ResourceFactory.create(project=project, path="b.po", format="gettext")
+        res_c = ResourceFactory.create(
+            project=project, path="c.ftl", format="fluent", obsolete=True
+        )
+        EntityFactory.create(
+            resource=res_c, key=["key-4"], string="key-4 = Message 4", obsolete=True
+        )
+        EntityFactory.create(
+            resource=res_c, key=["key-5"], string="key-5 = Message 5", obsolete=True
+        )
+        EntityFactory.create(
+            resource=res_c, key=["key-6"], string="key-6 = Message 6", obsolete=True
+        )
+
+        # Filesystem setup
+        c_ftl = dedent(
+            """
+            key-1 = Message 1
+            key-2 = Message 2
+            key-3 = Message 3
+            """
+        )
+        makedirs(repo.checkout_path)
+        build_file_tree(
+            repo.checkout_path,
+            {
+                "en-US": {"a.ftl": "", "b.pot": "", "c.ftl": c_ftl},
+                "fr-Test": {"a.ftl": "", "b.po": ""},
+            },
+        )
+
+        # Paths setup
+        mock_checkout = Mock(
+            Checkout,
+            path=repo.checkout_path,
+            changed=[join("en-US", "c.ftl")],
+            removed=[],
+            renamed=[],
+        )
+        paths = find_paths(project, Checkouts(mock_checkout, mock_checkout))
+
+        # Test
+        assert sync_resources_from_repo(
+            project, locale_map, mock_checkout, paths, now
+        ) == (3, {"c.ftl"}, set())
+
+        res_c = project.resources.get(path="c.ftl")
+
+        # resource de-obsoleted
+        assert not res_c.obsolete
+
+        # TODO Entities should also be de-obsoleted
+        assert set(
+            (tuple(ent.key), ent.obsolete)
+            for ent in Entity.objects.filter(resource=res_c)
+        ) == {
+            (("key-1",), False),
+            (("key-2",), False),
+            (("key-3",), False),
+            (("key-4",), True),
+            (("key-5",), True),
+            (("key-6",), True),
+        }
 
 
 @pytest.mark.django_db

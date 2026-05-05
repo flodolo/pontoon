@@ -74,7 +74,7 @@ def teams(request):
         "teams/teams.html",
         {
             "locales": locales,
-            "all_locales_stats": TranslatedResource.objects.all().string_stats(),
+            "all_locales_stats": TranslatedResource.objects.string_stats(),
             "locale_stats": locale_stats,
             "form": form,
             "top_instances": get_top_instances(locales, locale_stats),

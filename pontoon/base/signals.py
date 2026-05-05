@@ -173,7 +173,7 @@ def add_locale_to_system_projects(sender, instance, created, **kwargs):
         projects = Project.objects.filter(system_project=True)
         for project in projects:
             ProjectLocale.objects.create(project=project, locale=instance)
-            for resource in project.resources.all():
+            for resource in project.resources.current():
                 translated_resource = TranslatedResource.objects.create(
                     resource=resource,
                     locale=instance,
@@ -189,7 +189,7 @@ def add_locale_to_terminology_project(sender, instance, created, **kwargs):
     if created:
         project = Project.objects.get(slug="terminology")
         ProjectLocale.objects.create(project=project, locale=instance)
-        for resource in project.resources.all():
+        for resource in project.resources.current():
             translated_resource = TranslatedResource.objects.create(
                 resource=resource,
                 locale=instance,
