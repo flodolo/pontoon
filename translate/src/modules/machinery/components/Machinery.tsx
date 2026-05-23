@@ -23,7 +23,6 @@ export function Machinery(): React.ReactElement<'section'> {
   } = useContext(MachineryTranslations);
   const { fetching, hasMore, input, query, results, setInput, getResults } =
     useContext(SearchData);
-  const isConcordanceSearchActive = query.trim().length > 0;
 
   const [sentryRef, { rootRef }] = useInfiniteScroll({
     loading: fetching,
@@ -72,30 +71,27 @@ export function Machinery(): React.ReactElement<'section'> {
         </form>
       </div>
       <div className='list-wrapper' ref={rootRef}>
-        {isConcordanceSearchActive ? (
-          <ul>
-            {results.map((result, index) => (
-              <MachineryTranslationComponent
-                index={index}
-                sourceString={query}
-                translation={result}
-                key={index}
-              />
-            ))}
-          </ul>
-        ) : (
-          <ul>
-            {translations.map((translation, index) => (
-              <MachineryTranslationComponent
-                index={index}
-                sourceString={source}
-                translation={translation}
-                key={index}
-              />
-            ))}
-          </ul>
-        )}
+        <ul>
+          {translations.map((translation, index) => (
+            <MachineryTranslationComponent
+              index={index}
+              sourceString={source}
+              translation={translation}
+              key={index}
+            />
+          ))}
+        </ul>
         {machineryFetching && <MachinerySkeletonLoader items={[]} />}
+        <ul>
+          {results.map((result, index) => (
+            <MachineryTranslationComponent
+              index={index + translations.length}
+              sourceString={query}
+              translation={result}
+              key={index + translations.length}
+            />
+          ))}
+        </ul>
         {(fetching || hasMore) && (
           <MachinerySkeletonLoader items={results} sentryRef={sentryRef} />
         )}
