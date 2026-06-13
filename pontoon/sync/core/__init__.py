@@ -4,7 +4,13 @@ from datetime import datetime
 
 from django.utils import timezone
 
-from pontoon.base.models import ChangedEntityLocale, Locale, Project, User
+from pontoon.base.models import (
+    ChangedEntityLocale,
+    Locale,
+    Project,
+    TranslatedResource,
+    User,
+)
 from pontoon.messaging.notifications import send_notification
 from pontoon.pretranslation.tasks import pretranslate
 from pontoon.sync.core.checkout import checkout_repos
@@ -92,8 +98,21 @@ def sync_project(
 
 
 def notify_users(project: Project, count: int, now: datetime) -> None:
+    # Determine the list of locales that actually received new strings,
+    # filtering by date_created == now to only look at strings added in this
+    # sync.
+    included_locales = (
+        TranslatedResource.objects.filter(
+            resource__project=project,
+            resource__entities__date_created=now,
+            resource__entities__obsolete=False,
+        )
+        .values_list("locale_id", flat=True)
+        .distinct()
+    )
     users = User.objects.filter(
         translation__entity__resource__project=project,
+        translation__locale_id__in=included_locales,
         profile__new_string_notifications=True,
     ).distinct()
     new_strings = f"{count} new {'string' if count == 1 else 'strings'}"
