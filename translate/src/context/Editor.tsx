@@ -184,7 +184,7 @@ export function EditorProvider({ children }: { children: React.ReactElement }) {
       setEditorFromHelpers: (str, sources, manual) =>
         setState((prev) => {
           const { fields, focusField, sourceView } = prev;
-          const field = focusField.current ?? fields[0];
+          let field = focusField.current ?? fields[0];
           field.handle.current.setValue(str);
           const next = {
             ...prev,
@@ -193,8 +193,11 @@ export function EditorProvider({ children }: { children: React.ReactElement }) {
           if (sourceView) {
             const result = buildMessageEntry(prev.base, prev.fields, buildOpts);
             next.fields = editSource(result ?? str);
-            focusField.current = next.fields[0];
+            field = focusField.current = next.fields[0];
             setResult(result);
+          }
+          if (manual) {
+            field.handle.current.focus();
           }
           return next;
         }),
