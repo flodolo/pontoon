@@ -72,3 +72,81 @@ An example may look like this:
 ```bash
 $ curl --globoff "https://example.com/api/v2/locales/?page_size=50"
 ```
+
+## Write Endpoints
+
+Most endpoints are read-only. The following accept writes and always require
+authentication.
+
+### `POST /api/v2/upload/translations/`
+
+Update translations from an uploaded translation file, as the authenticated user. This
+is the API equivalent of the **Upload Translations** button in the translate app.
+
+The request body is `multipart/form-data` with these fields:
+
+| Field        | Description                                                 |
+| ------------ | ----------------------------------------------------------- |
+| `slug`       | Project slug                                                |
+| `code`       | Locale code                                                 |
+| `part`       | Resource path within the project                            |
+| `uploadfile` | Translation file, in the same format as the target resource |
+
+```bash
+$ curl -X POST \
+  -H "Authorization: Bearer <YOUR-TOKEN>" \
+  -F "slug=firefox" \
+  -F "code=it" \
+  -F "part=browser/browser.ftl" \
+  -F "uploadfile=@browser.ftl" \
+  "https://example.com/api/v2/upload/translations/"
+```
+
+A successful request returns a summary of the import:
+
+```json
+{ "updated": 12, "unchanged": 3, "undefined_keys": [["obsolete_key"]] }
+```
+
+- `updated`: translations added or replaced. Uploaded translations replace the
+  current approved translation for their string, or approve a matching suggestion.
+- `unchanged`: translations identical to the current approved or pretranslated one,
+  ignored.
+- `undefined_keys`: keys of translations with no matching string in Pontoon, ignored.
+  Each key is a list of strings, in the same format as the `key` field of entities.
+
+The upload is additive: strings missing from the uploaded file are left untouched, so
+partial files can be used to update a subset of translations. Re-uploading an unchanged
+file succeeds with `"updated": 0`. A file that cannot be parsed, or that contains no
+translations at all, is rejected with `400` rather than reported as an unchanged upload,
+so `"updated": 0` always means the file was valid and simply changed nothing.
+
+Requirements and limits:
+
+- You must have translator rights for the target locale, and the project locale must not
+  be read-only. Otherwise the request is rejected with `403`.
+- The project must not be disabled, and must be enabled for the target locale.
+  Otherwise the request is rejected with `404`.
+- Unlike most endpoints, this one accepts **only** PAT authentication, not session
+  cookies.
+- Uploaded files must be under 5000 kB, and must match the format of the target
+  resource.
+- The endpoint is rate limited per user (60 calls per hour by default, configurable via
+  `UPLOAD_API_THROTTLE_RATE`), because each upload parses the whole file and recomputes
+  project statistics.
+
+Note that a PAT carries the full authority of the user who created it, including the
+ability to write translations wherever that user can translate.
+
+Uploaded translations are written to the database immediately, and pushed to the
+project's VCS repository by the next sync.
+
+Status codes:
+
+| Code  | Meaning                                                                                        |
+| ----- | ---------------------------------------------------------------------------------------------- |
+| `200` | Upload accepted (possibly with `"updated": 0`)                                                 |
+| `400` | Missing or invalid field, unsupported format, unparseable or empty file, or file too large      |
+| `403` | Missing token, invalid or expired token, or insufficient permission                            |
+| `404` | Unknown or disabled project, unknown locale or resource, or project not enabled for the locale |
+| `429` | Rate limit exceeded                                                                            |

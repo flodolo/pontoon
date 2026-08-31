@@ -1328,6 +1328,9 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
     "DEFAULT_PAGINATION_CLASS": "pontoon.api.pagination.DynamicPageNumberPagination",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_THROTTLE_RATES": {
+        "upload": os.environ.get("UPLOAD_API_THROTTLE_RATE", "60/hour"),
+    },
 }
 
 SPECTACULAR_SETTINGS = {

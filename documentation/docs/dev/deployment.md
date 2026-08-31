@@ -332,6 +332,12 @@ Optional. A duration (in seconds) for which IPs are blocked (default:
 Timezone for the dynos that will run the app. Pontoon operates in UTC,
 so set this to `UTC`.
 
+`UPLOAD_API_THROTTLE_RATE`  
+Optional. Rate limit for the translation upload API endpoint
+(`/api/v2/upload/translations/`), applied per authenticated user. Uses the Django REST
+Framework format `<number>/<period>`, where period is one of `second`,
+`minute`, `hour` or `day` (default: `60/hour`).
+
 `VCS_SYNC_NAME`  
 Optional. Default committer's name used when committing translations to
 version control system.

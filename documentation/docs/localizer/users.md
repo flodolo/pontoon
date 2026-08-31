@@ -125,6 +125,11 @@ curl \
 
 PATs can be manually deleted at any time and automatically expire after one year.
 
+A PAT carries the full authority of the user who created it. In particular, it can be used
+with the [upload endpoint](https://github.com/mozilla/pontoon/blob/main/pontoon/api/README.md#post-apiv2uploadtranslations)
+to write translations for any locale the user is a translator for, so it should be treated
+like a password.
+
 ### Account removal
 
 Users can delete their account by scrolling to the `Account Management` section, where a button reading `Delete Account` is located. Once clicked, the user will need to

@@ -385,3 +385,44 @@ class EntitySearchSerializer(EntitySerializer):
         translation = obj.active_translations[0] if obj.active_translations else None
 
         return TranslationSerializer(translation, context=self.context).data
+
+
+# A raw schema makes drf-spectacular render `uploadfile` as a file picker without
+# enabling `COMPONENT_SPLIT_REQUEST` globally. UploadFileForm handles validation.
+UPLOAD_REQUEST_SCHEMA = {
+    "type": "object",
+    "description": (
+        "Translation file to import, with the project, locale and resource it targets."
+    ),
+    "properties": {
+        "slug": {"type": "string", "description": "Project slug."},
+        "code": {"type": "string", "description": "Locale code."},
+        "part": {
+            "type": "string",
+            "description": "Resource path within the project.",
+        },
+        "uploadfile": {
+            "type": "string",
+            "format": "binary",
+            "description": (
+                "Translation file, in the same format as the target resource."
+            ),
+        },
+    },
+    "required": ["slug", "code", "part", "uploadfile"],
+}
+
+
+class UploadResponseSerializer(serializers.Serializer):
+    """Result of a translation file upload."""
+
+    updated = serializers.IntegerField(
+        help_text="Number of translations added or replaced by the upload."
+    )
+    unchanged = serializers.IntegerField(
+        help_text="Number of translations identical to the current ones, ignored."
+    )
+    undefined_keys = serializers.ListField(
+        child=serializers.ListField(child=serializers.CharField()),
+        help_text="Keys of translations with no matching entity in Pontoon, ignored.",
+    )
