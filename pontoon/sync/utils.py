@@ -3,7 +3,8 @@ from dataclasses import dataclass, field
 from os.path import basename, join
 from tempfile import TemporaryDirectory
 
-from moz.l10n.model import Id as L10nId
+from moz.l10n.formats import Format as L10nFormat
+from moz.l10n.model import Id as L10nId, Resource as L10nResource
 from moz.l10n.resource import parse_resource, serialize_resource
 
 from django.core.files import File
@@ -33,6 +34,7 @@ from pontoon.sync.core.translations_to_repo import (
     build_translated_resource,
 )
 from pontoon.sync.formats import RepoTranslation, as_repo_translations
+from pontoon.terminology.utils import get_all_message_text, join_text_fragments
 
 
 def serialize_translated_resource(db_res: DbResource, locale: Locale) -> str:
@@ -86,27 +88,61 @@ class UploadResult:
         return len(self.undefined_keys)
 
 
-def parse_uploaded_file(
-    locale: Locale, db_res: DbResource, upload: File
-) -> dict[L10nId, RepoTranslation]:
-    """Translations in an uploaded file, keyed by entity key."""
+def parse_upload(
+    upload: File, file_name: str, gettext_plurals: list[str]
+) -> L10nResource:
+    """Parse an uploaded file, using `file_name` to detect its format."""
     with TemporaryDirectory() as root:
-        file_path = join(root, basename(db_res.path))
-        with open(file_path, "wb") as file:
-            for chunk in upload.chunks():
-                file.write(chunk)
         try:
-            l10n_res = parse_resource(
+            # The file name is only used to detect the format, and comes from the
+            # upload itself when the target resource is unknown.
+            file_path = join(root, file_name)
+            with open(file_path, "wb") as file:
+                for chunk in upload.chunks():
+                    file.write(chunk)
+            return parse_resource(
                 file_path,
-                gettext_plurals=locale.cldr_plurals_list(),
+                gettext_plurals=gettext_plurals,
                 gettext_skip_obsolete=True,
             )
         except Exception as error:
             raise UploadError(f"Could not parse uploaded file: {error}") from error
+
+
+def parse_uploaded_file(
+    locale: Locale, db_res: DbResource, upload: File
+) -> dict[L10nId, RepoTranslation]:
+    """Translations in an uploaded file, keyed by entity key."""
+    l10n_res = parse_upload(upload, basename(db_res.path), locale.cldr_plurals_list())
     upload_translations = {rt.key: rt for rt in as_repo_translations(l10n_res)}
     if not upload_translations:
         raise UploadError("No translations found in uploaded file.")
     return upload_translations
+
+
+def source_text_from_upload(upload: File) -> str:
+    """Source strings of an uploaded file, joined into a single text.
+
+    For gettext, the source strings are the message ids rather than the translations,
+    so a translated `.po` file yields the same text as its template.
+    """
+    l10n_res = parse_upload(upload, basename(upload.name), ["one", "other"])
+    if l10n_res.format == L10nFormat.gettext:
+        texts = [
+            text
+            for entry in l10n_res.all_entries()
+            for text in (entry.id[0], entry.get_meta("plural"))
+            if text
+        ]
+    else:
+        texts = [
+            get_all_message_text([entry.value, *(entry.properties or {}).values()])
+            for entry in l10n_res.all_entries()
+        ]
+    text = join_text_fragments(texts)
+    if not text.strip():
+        raise UploadError("No strings found in uploaded file.")
+    return text
 
 
 def entity_ids(db_res: DbResource) -> dict[L10nId, int]:

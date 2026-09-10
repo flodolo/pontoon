@@ -1353,6 +1353,167 @@ def test_terminology_extract_from_text_errors(terminology_extraction_setup):
     }
 
 
+def _extract_from_file(client, locale, uploadfile):
+    return client.post(
+        "/api/v2/terminology/extract-from-file/",
+        {"locale": locale, "uploadfile": uploadfile},
+        format="multipart",
+    )
+
+
+def _ftl_file(contents, name="resource.ftl"):
+    return SimpleUploadedFile(name, contents.encode("utf-8"))
+
+
+@pytest.mark.django_db
+def test_terminology_extract_from_file_requires_authentication(
+    terminology_extraction_setup,
+):
+    response = _extract_from_file(
+        APIClient(), "kg", _ftl_file("key = Open a new tab\n")
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_terminology_extract_from_file_session_auth_rejected(
+    terminology_extraction_setup, member
+):
+    client = APIClient()
+    # force_authenticate() would bypass authentication_classes.
+    client.force_login(member.user)
+
+    response = _extract_from_file(client, "kg", _ftl_file("key = Open a new tab\n"))
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_terminology_extract_from_file(terminology_extraction_setup, member):
+    client = _pat_client(member.user, name="Terminology Token")
+
+    response = _extract_from_file(
+        client,
+        "kg",
+        _ftl_file("key1 = Open a new tab\nkey2 = Click here\n"),
+    )
+
+    assert response.status_code == 200
+    assert response.data == {
+        "count": 3,
+        "results": [
+            {
+                "definition": "Press",
+                "part_of_speech": "verb",
+                "text": "click",
+                "translation_text": None,
+                "usage": "Click the button.",
+                "notes": "",
+            },
+            {
+                "definition": "Allow access",
+                "part_of_speech": "verb",
+                "text": "open",
+                "translation_text": "odpri",
+                "usage": "Open the door.",
+                "notes": "",
+            },
+            {
+                "definition": "A page in the browser",
+                "part_of_speech": "noun",
+                "text": "tab",
+                "translation_text": "zavihek",
+                "usage": "Open a new tab.",
+                "notes": "",
+            },
+        ],
+    }
+
+
+@pytest.mark.django_db
+def test_terminology_extract_from_file_gettext(terminology_extraction_setup, member):
+    """For gettext, terms are matched against the message ids, not the translations."""
+    client = _pat_client(member.user, name="Terminology Token")
+
+    response = _extract_from_file(
+        client,
+        "kg",
+        _po_file(contents='msgid "Open a new tab"\nmsgstr "Odpri zavihek"'),
+    )
+
+    assert response.status_code == 200
+    assert [t["text"] for t in response.data["results"]] == ["open", "tab"]
+
+
+@pytest.mark.django_db
+def test_terminology_extract_from_file_placeholders(
+    terminology_extraction_setup, member
+):
+    """Terms are not matched across a placeholder."""
+    client = _pat_client(member.user, name="Terminology Token")
+
+    response = _extract_from_file(client, "kg", _ftl_file("key = Ta{ $x }b is open\n"))
+
+    assert response.status_code == 200
+    assert [t["text"] for t in response.data["results"]] == ["open"]
+
+
+@pytest.mark.django_db
+def test_terminology_extract_from_file_errors(terminology_extraction_setup, member):
+    client = _pat_client(member.user, name="Terminology Token")
+
+    response = client.post(
+        "/api/v2/terminology/extract-from-file/",
+        {"uploadfile": _ftl_file("key = Open\n")},
+        format="multipart",
+    )
+    assert response.status_code == 400
+    assert response.data == {"locale": ["This field is required."]}
+
+    response = client.post(
+        "/api/v2/terminology/extract-from-file/",
+        {"locale": "kg"},
+        format="multipart",
+    )
+    assert response.status_code == 400
+    assert response.data == {"uploadfile": ["This field is required."]}
+
+    response = _extract_from_file(client, "missing", _ftl_file("key = Open\n"))
+    assert response.status_code == 404
+
+    response = _extract_from_file(
+        client, "kg", _ftl_file("Open a new tab", name="terms.txt")
+    )
+    assert response.status_code == 400
+    assert response.data["uploadfile"][0].startswith("Could not parse uploaded file:")
+
+    response = _extract_from_file(client, "kg", _ftl_file("# Just a comment\n"))
+    assert response.status_code == 400
+    assert response.data == {"uploadfile": ["No strings found in uploaded file."]}
+
+
+@pytest.mark.django_db
+def test_terminology_extract_from_file_throttled(
+    monkeypatch, terminology_extraction_setup, member
+):
+    # DRF copies the rates into a class attribute at import time, so overriding the
+    # REST_FRAMEWORK setting has no effect here.
+    monkeypatch.setattr(
+        SimpleRateThrottle,
+        "THROTTLE_RATES",
+        {"terminology_burst": "2/minute", "terminology_sustained": "1000/hour"},
+    )
+    cache.clear()
+
+    client = _pat_client(member.user, name="Terminology Token")
+    for expected_status in (200, 200, 429):
+        response = _extract_from_file(client, "kg", _ftl_file("key = Open a new tab\n"))
+        assert response.status_code == expected_status
+
+    cache.clear()
+
+
 @pytest.mark.django_db
 def test_tm_search(django_assert_num_queries):
     locale_a = LocaleFactory(

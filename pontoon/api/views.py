@@ -23,7 +23,7 @@ from pontoon.api.authentication import (
     PersonalAccessTokenAuthentication,
 )
 from pontoon.api.filters import TermFilter, TranslationMemoryFilter
-from pontoon.api.throttling import UPLOAD_THROTTLE_CLASSES
+from pontoon.api.throttling import SCOPED_THROTTLE_CLASSES
 from pontoon.base import forms
 from pontoon.base.badge_utils import badges_review_level, badges_translation_level
 from pontoon.base.get_entities import get_entities_for_project_locale
@@ -55,6 +55,7 @@ from pontoon.terminology.utils import get_terms_for_text
 from pontoon.translations.utils import parse_source_string_to_json
 
 from .serializers import (
+    TERMINOLOGY_EXTRACT_REQUEST_SCHEMA,
     TRANSLATION_STATS_FIELDS,
     UPLOAD_KEYS_ERROR_LIMIT,
     UPLOAD_REQUEST_SCHEMA,
@@ -66,6 +67,7 @@ from .serializers import (
     NestedLocaleSerializer,
     NestedProjectLocaleSerializer,
     NestedProjectSerializer,
+    TermExtractFromFileResponseSerializer,
     TermSerializer,
     TranslationMemorySerializer,
     UploadPretranslationsResponseSerializer,
@@ -532,6 +534,64 @@ class TermExtractFromTextView(generics.ListAPIView):
         return get_terms_for_text(locale, text)
 
 
+class TermExtractFromFileView(APIView):
+    """Terms matching the source strings of an uploaded file."""
+
+    authentication_classes = [PersonalAccessTokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = SCOPED_THROTTLE_CLASSES
+    throttle_scope = "terminology"
+
+    @extend_schema(
+        request={"multipart/form-data": TERMINOLOGY_EXTRACT_REQUEST_SCHEMA},
+        responses={
+            200: OpenApiResponse(
+                response=TermExtractFromFileResponseSerializer,
+                description="Terms appearing in the file, with their translation in "
+                "the given locale.",
+            ),
+            400: OpenApiResponse(
+                description="Missing parameter, or a file that is too large, "
+                "cannot be parsed, or contains no strings."
+            ),
+            403: OpenApiResponse(description="Missing, invalid or expired token."),
+            404: OpenApiResponse(description="Unknown locale."),
+            429: OpenApiResponse(description="Rate limit exceeded."),
+        },
+        description=(
+            "Extract all known terms appearing in the source strings of an uploaded "
+            "file, with their translation in the given locale. Nothing is written to "
+            "the database. The file is expected to hold English source strings: for "
+            "gettext, the message ids are used, so a translated `.po` file gives the "
+            "same result as its template."
+        ),
+    )
+    def post(self, request):
+        from pontoon.sync.utils import UploadError, source_text_from_upload
+
+        form = forms.ExtractTerminologyAPIForm(request.data, request.FILES)
+        if not form.is_valid():
+            raise ValidationError(form.errors)
+
+        locale = get_object_or_404(Locale, code=form.cleaned_data["locale"])
+
+        uploadfile = form.cleaned_data["uploadfile"]
+        try:
+            forms.validate_uploaded_file(uploadfile, None)
+        except DjangoValidationError as error:
+            raise ValidationError({"uploadfile": error.messages})
+
+        try:
+            text = source_text_from_upload(uploadfile)
+        except UploadError as error:
+            raise ValidationError({"uploadfile": [str(error)]})
+
+        terms = get_terms_for_text(locale, text)
+        serializer = TermSerializer(terms, many=True, context={"request": request})
+
+        return Response({"count": len(terms), "results": serializer.data})
+
+
 class TranslationMemorySearchListView(generics.ListAPIView):
     serializer_class = TranslationMemorySerializer
     filter_backends = [DjangoFilterBackend]
@@ -698,7 +758,7 @@ class UploadView(APIView):
 
     authentication_classes = [PersonalAccessTokenAuthentication]
     permission_classes = [IsAuthenticated]
-    throttle_classes = UPLOAD_THROTTLE_CLASSES
+    throttle_classes = SCOPED_THROTTLE_CLASSES
     # Endpoints share a single upload quota per user.
     throttle_scope = "upload"
 

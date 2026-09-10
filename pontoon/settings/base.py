@@ -1341,6 +1341,12 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "upload_burst": os.environ.get("API_UPLOAD_THROTTLE_BURST", "30/minute"),
         "upload_sustained": os.environ.get("API_UPLOAD_THROTTLE_SUSTAINED", "180/hour"),
+        "terminology_burst": os.environ.get(
+            "API_TERMINOLOGY_THROTTLE_BURST", "60/minute"
+        ),
+        "terminology_sustained": os.environ.get(
+            "API_TERMINOLOGY_THROTTLE_SUSTAINED", "600/hour"
+        ),
     },
 }
 

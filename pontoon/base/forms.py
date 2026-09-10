@@ -86,6 +86,16 @@ class UploadTranslationsAPIForm(forms.Form):
     uploadfile = forms.FileField()
 
 
+class ExtractTerminologyAPIForm(forms.Form):
+    """Locale and file of a terminology extraction request.
+
+    The file is validated separately, after the API has authorized the caller.
+    """
+
+    locale = forms.CharField()
+    uploadfile = forms.FileField()
+
+
 class UserPermissionLogFormMixin:
     """
     Logging of changes requires knowledge about the current user.

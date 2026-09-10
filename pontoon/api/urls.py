@@ -67,6 +67,11 @@ api_v2_patterns = [
         name="term-extract-from-text",
     ),
     path(
+        "terminology/extract-from-file/",
+        views.TermExtractFromFileView.as_view(),
+        name="term-extract-from-file",
+    ),
+    path(
         # Terminology Search
         "search/terminology/",
         views.TermSearchListView.as_view(),

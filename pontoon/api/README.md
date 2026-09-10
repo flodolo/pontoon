@@ -129,6 +129,72 @@ No authentication is required. Longer texts are rejected with `400`: the maximum
 is configurable via `TERMINOLOGY_API_MAX_CHARS` (default 2048 characters).
 An unknown locale returns `404`.
 
+### `POST /api/v2/terminology/extract-from-file/`
+
+Extract the terms appearing in an uploaded file, with their translation in a given
+locale. Term matching works exactly as in
+[`GET /api/v2/terminology/extract-from-text/`](#get-apiv2terminologyextract-from-text),
+but the text is taken from every string in the file, so a whole resource can be checked
+with a single call.
+
+This endpoint requires authentication with a Personal Access Token, to avoid abuse.
+
+The request body is `multipart/form-data` with these fields:
+
+| Field        | Description                                     |
+| ------------ | ----------------------------------------------- |
+| `locale`     | Locale code                                     |
+| `uploadfile` | Source file, in any format supported by Pontoon |
+
+```bash
+$ curl -X POST \
+  -H "Authorization: Bearer <YOUR-TOKEN>" \
+  -F "locale=it" \
+  -F "uploadfile=@browser.ftl" \
+  "https://example.com/api/v2/terminology/extract-from-file/"
+```
+
+```json
+{
+  "count": 1,
+  "results": [
+    {
+      "definition": "A page in the browser",
+      "part_of_speech": "noun",
+      "text": "tab",
+      "translation_text": "scheda",
+      "usage": "Open a new tab.",
+      "notes": ""
+    }
+  ]
+}
+```
+
+The file is expected to contain English source strings, and its name determines how it
+is parsed, so keep the original file extension. For gettext, terms are matched against
+the message ids, so a translated `.po` file gives the same results as its template.
+Results are not paginated: the number of terms is bounded by the size of the
+terminology, not by the size of the file.
+
+Requirements and limits:
+
+- Uploaded files must be under 5000 kB. A file that cannot be parsed, or that contains
+  no strings, is rejected with `400`.
+- The endpoint is rate limited per user, with a burst limit of 60 calls per minute and
+  a sustained limit of 600 calls per hour by default (configurable via
+  `API_TERMINOLOGY_THROTTLE_BURST` and `API_TERMINOLOGY_THROTTLE_SUSTAINED`). This
+  quota is separate from the one used by the write endpoints.
+
+Status codes:
+
+| Code  | Meaning                                                     |
+| ----- | ----------------------------------------------------------- |
+| `200` | Terms extracted (possibly none)                             |
+| `400` | Missing field, unparseable or empty file, or file too large |
+| `403` | Missing token, or invalid or expired token                  |
+| `404` | Unknown locale                                              |
+| `429` | Rate limit exceeded                                         |
+
 ## Write Endpoints
 
 The following endpoints can write data and always require authentication with a Personal

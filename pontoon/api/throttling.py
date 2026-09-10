@@ -35,7 +35,6 @@ class SustainedRateThrottle(_SuffixedScopedRateThrottle):
     suffix = "sustained"
 
 
-# Throttles for endpoints that write translations from uploaded files.
-# Views using these should set `throttle_scope = "upload"`
-# so that they share a single quota per user.
-UPLOAD_THROTTLE_CLASSES = [BurstRateThrottle, SustainedRateThrottle]
+# Throttles for endpoints accepting uploaded files. Views using these should set a
+# `throttle_scope`, and endpoints sharing a scope share a single quota per user.
+SCOPED_THROTTLE_CLASSES = [BurstRateThrottle, SustainedRateThrottle]

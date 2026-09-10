@@ -417,6 +417,29 @@ UPLOAD_REQUEST_SCHEMA = {
 }
 
 
+TERMINOLOGY_EXTRACT_REQUEST_SCHEMA = {
+    "type": "object",
+    "description": "Source file to extract terminology from, and the locale to "
+    "return term translations in.",
+    "properties": {
+        "locale": {"type": "string", "description": "Locale code."},
+        "uploadfile": {
+            "type": "string",
+            "format": "binary",
+            "description": "Source (English) file, in any format supported by Pontoon.",
+        },
+    },
+    "required": ["locale", "uploadfile"],
+}
+
+
+class TermExtractFromFileResponseSerializer(serializers.Serializer):
+    """Terms found in an uploaded file."""
+
+    count = serializers.IntegerField(help_text="Number of matching terms.")
+    results = TermSerializer(many=True)
+
+
 # For large files, only report the first keys that could not be imported, alongside
 # their total number.
 UPLOAD_KEYS_ERROR_LIMIT = 100
