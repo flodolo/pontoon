@@ -1,5 +1,5 @@
-from collections import defaultdict
 from dataclasses import dataclass, field
+from itertools import groupby
 from os.path import basename, join
 from tempfile import TemporaryDirectory
 
@@ -266,20 +266,26 @@ def import_uploaded_pretranslations(
         locale, db_res, upload
     )
 
-    current: dict[int, list[Translation]] = defaultdict(list)
-    for tx in Translation.objects.filter(
-        entity__resource=db_res,
-        entity__obsolete=False,
-        locale=locale,
-        rejected=False,
-    ).iterator():
-        current[tx.entity_id].append(tx)
+    current: dict[int, list[Translation]] = {
+        entity_id: list(txs)
+        for entity_id, txs in groupby(
+            Translation.objects.filter(
+                entity__resource=db_res,
+                entity__obsolete=False,
+                locale=locale,
+                rejected=False,
+            )
+            .order_by("entity_id")
+            .iterator(),
+            key=lambda tx: tx.entity_id,
+        )
+    }
 
     now = timezone.now()
     pending: list[_PendingPretranslation] = []
     for key, rt in upload_translations.items():
         entity_id = entities[key]
-        translations = current[entity_id]
+        translations = current.get(entity_id, [])
         if rt.fuzzy or any(tx.approved for tx in translations):
             result.skipped += 1
             continue
