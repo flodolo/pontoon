@@ -260,6 +260,17 @@ def import_uploaded_pretranslations(
 
     Raises `UploadConflictError` if a review approved a targeted translation after this
     import read it, and that approval was committed first.
+
+    This does not reuse `update_db_translations()`, which has the same overall shape,
+    but makes a different call at nearly every decision point:
+
+    |                    | Sync from repo        | Pretranslation upload           |
+    | ------------------ | --------------------- | ------------------------------- |
+    | Approved           | replaced              | entity skipped                  |
+    | Rejects others     | all                   | only pretranslated or fuzzy     |
+    | Fuzzy in upload    | stored as fuzzy       | skipped                         |
+    | Checks             | after write           | before write, failures dropped  |
+    | TM entries         | created               | none                            |
     """
     result = PretranslationUploadResult()
     upload_translations, entities, result.undefined_keys = parse_upload_for_entities(
