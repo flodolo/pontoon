@@ -62,6 +62,11 @@ api_v2_patterns = [
         name="upload-pretranslations",
     ),
     path(
+        "upload/suggestions/",
+        views.UploadSuggestionsView.as_view(),
+        name="upload-suggestions",
+    ),
+    path(
         # Terminology Search
         "search/terminology/",
         views.TermSearchListView.as_view(),
